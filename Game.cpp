@@ -78,6 +78,8 @@ int lives, money, enemy_start;
 pair<int, int> s_point, e_point;
 vector<pair<int, int> > path_vec;
 map<pair<int, int>, int> tower_index;
+vector<int> tele_size;
+vector<int> tele;
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////// PROVIDED FUNCTION PROTOTYPE  ////////////////////////////
@@ -96,6 +98,8 @@ void move_enemy(string);
 void upgrade_tower(string);
 void attack_enemy(string);
 void rain_tiles(string);
+void flood(string);
+void teleport(string);
 
 
 int main(void) {
@@ -138,6 +142,8 @@ int main(void) {
         if(s[0] == 'u') upgrade_tower(s);
         if(s[0] == 'a') attack_enemy(s);
         if(s[0] == 'r') rain_tiles(s);
+        if(s[0] == 'f') flood(s);
+        if(s[0] == 'c') teleport(s);
     }
 
     cout<<"Enter Command: [CTRL+D]"<<endl;
@@ -146,15 +152,25 @@ int main(void) {
     return 0;
 }
 
-/** Adding Rain Tiles on map**/
+/** adding the functionality of teleport **/
 
-void rain_tiles(string s){
+void teleport(string s){
     vector<int> temp;
     int total = 0;
+    bool flag = 0;
+
     loop(i, 2, s.size()){
         if(s[i] == ' '){
-            temp.pb(total);
+            if(flag) temp.pb(-total);
+            else temp.pb(total);
+
             total = 0;
+            flag = false;
+            continue;
+        }
+
+        if(s[i] == '-'){
+            flag = true;
             continue;
         }
 
@@ -162,9 +178,251 @@ void rain_tiles(string s){
         total += (s[i] - '0');
     }
 
-    temp.pb(total);
+    if(flag) temp.pb(-total);
+    else temp.pb(total);
     total = 0;
 
+    //for(auto it : temp) cout<<it<<" ";
+
+    if((temp[0] < 0) || (temp[1] < 0) || (temp[2] <0) || (temp[3] < 0)){
+        for(auto it : temp) cout<<it<<" ";
+        cout<<"Error: Teleporters can only be created on path tiles."<<endl;
+        print_map();
+        return;
+    }
+
+    if((maps[temp[0]][temp[1]].land == GRASS) || (maps[temp[0]][temp[1]].land == WATER) || (maps[temp[0]][temp[1]].land == PATH_END) || (maps[temp[0]][temp[1]].land == TELEPORTER)){
+        cout<<"1 Error: Teleporters can only be created on path tiles."<<endl;
+        print_map();
+        return;
+    }
+
+    if((maps[temp[2]][temp[3]].land == GRASS) || (maps[temp[2]][temp[3]].land == WATER) || (maps[temp[2]][temp[3]].land == PATH_END) || (maps[temp[2]][temp[3]].land == TELEPORTER)){
+        cout<<temp[2]<<" "<<temp[3]<<endl;
+        cout<<"2 Error: Teleporters can only be created on path tiles."<<endl;
+        print_map();
+        return;
+    }
+
+    for(auto it : temp) tele.pb(it);
+
+    int teleport_size = 0;
+
+    int i = temp[0], j = temp[1];
+    int p_i = i, p_j = j;
+
+    if(maps[i][j].land == PATH_DOWN) i++;
+    else if(maps[i][j].land == PATH_UP) i--;
+    else if(maps[i][j].land == PATH_RIGHT) j++;
+    else if(maps[i][j].land == PATH_LEFT) j--;
+
+    maps[p_i][p_j].land = TELEPORTER;
+
+    p_i = i, p_j = j;
+
+    while(true){
+        if((i == temp[2]) && (j == temp[3])){
+            maps[i][j].land = TELEPORTER;
+            break;
+        }
+
+        teleport_size++;
+
+        if(maps[i][j].land == TELEPORTER){
+            for(int k = 0; k<tele.size(); k+=4){
+                if(i == tele[k] && j == tele[k+1]){
+                    (maps[i][j].land) = GRASS;
+                    i = tele[k+2], j = tele[k+3];
+                    maps[i][j].land = GRASS;
+
+                    teleport_size += (tele_size[k/4]+2);
+
+                    print_map();
+
+                    //return;
+
+                    bool flag = false;
+                    loop(m, max(i-1, 0), min(i+2, 6)){
+                        loop(n, max(j-1, 0), min(j+2, 12)){
+                            if(maps[m][n].land == PATH_DOWN || maps[m][n].land == PATH_UP || maps[m][n].land == PATH_LEFT || maps[m][n].land == PATH_RIGHT){
+                                i = m, j = n;
+                                p_i = i, p_j = j;
+                                flag = true;
+                                break;
+                            }
+                        }
+
+                        if(flag) break;
+                    }
+                    continue;
+                }
+            }
+        }
+
+        if(maps[i][j].land == PATH_DOWN) i++;
+        else if(maps[i][j].land == PATH_UP) i--;
+        else if(maps[i][j].land == PATH_RIGHT) j++;
+        else if(maps[i][j].land == PATH_LEFT) j--;
+
+        maps[p_i][p_j].land = GRASS;
+        maps[p_i][p_j].n_enemies = 0;
+        maps[p_i][p_j].entity = EMPTY;
+
+        p_i = i, p_j = j;
+    }
+
+    tele_size.pb(teleport_size);
+
+    print_map();
+}
+
+/** Floodding **/
+
+void flood(string s){
+    int time = s[2] -'0';
+
+    set<pair<int, int> > sec;
+
+    loop(times, 0, time){
+        loop(i, 0, 6){
+            loop(j, 0, 12){
+                if(maps[i][j].land == WATER) sec.insert({i, j});
+            }
+        }
+
+        for(auto it : sec){
+            int i = it.fi, j = it.se;
+
+            if(maps[max(i-1, 0)][j].land == GRASS){
+                maps[max(i-1, 0)][j].land = WATER;
+                if(maps[max(i-1, 0)][j].entity != FORTIFIED_TOWER) maps[max(i-1, 0)][j].entity = EMPTY;
+            }
+
+            if(maps[min(i+1, 5)][j].land == GRASS){
+                maps[min(i+1, 5)][j].land = WATER;
+                if(maps[min(i+1, 5)][j].entity != FORTIFIED_TOWER) maps[min(i+1, 5)][j].entity = EMPTY;
+            }
+
+            if(maps[i][max(j-1, 0)].land == GRASS){
+                maps[i][max(j-1, 0)].land = WATER;
+                if(maps[i][max(j-1, 0)].entity != FORTIFIED_TOWER) maps[i][max(j-1, 0)].entity = EMPTY;
+            }
+
+            if(maps[i][min(j+1, 11)].land == GRASS){
+                maps[i][min(j+1, 11)].land = WATER;
+                if(maps[i][min(j+1, 11)].entity != FORTIFIED_TOWER) maps[i][min(j+1, 11)].entity = EMPTY;
+            }
+
+        }
+    }
+    print_map();
+}
+
+/** Adding Rain Tiles on map**/
+
+void rain_tiles(string s){
+    vector<int> temp;
+    int total = 0;
+    bool flag = false;
+
+    // inserting both -ve and +ve value
+
+    loop(i, 2, s.size()){
+        if(s[i] == ' '){
+            if(flag) temp.pb(-total);
+            else temp.pb(total);
+
+            total = 0;
+            flag = false;
+            continue;
+        }
+
+        if(s[i] == '-'){
+            flag = true;
+            continue;
+        }
+
+        total *= 10;
+        total += (s[i] - '0');
+    }
+
+    if(flag) temp.pb(-total);
+    else temp.pb(total);
+    total = 0;
+
+    // converting temp in range and also handling -values
+
+    temp[2] %= 6;
+    temp[3] %= 12;
+
+    if(temp[2] < 0) temp[2] = 6 + temp[2];
+    if(temp[3] < 0) temp[3] = 12 + temp[3];
+
+
+    vector<int> row_rain, col_rain;
+
+    int count = 0;
+
+    // getting those row in which the rain occur after offset;
+
+    loop(i, temp[2], 6){
+        if(count%temp[0]){
+            count++;
+            continue;
+        }
+
+        count++;
+        row_rain.pb(i);
+
+    }
+
+    loop(i, 0, temp[2]){
+        if(count%temp[0]){
+            count++;
+            continue;
+        }
+
+        count++;
+        row_rain.pb(i);
+    }
+
+    // getting those col in which the rain occur after offset;
+
+    count = 0;
+
+    loop(i, temp[3], 12){
+        if(count%temp[1] != 0){
+            count++;
+            continue;
+        }
+
+        count++;
+        col_rain.pb(i);
+
+    }
+
+    loop(i, 0, temp[3]){
+        if(count%temp[1] != 0){
+            count++;
+            continue;
+        }
+
+        count++;
+        col_rain.pb(i);
+    }
+
+    // changing land type
+
+    for(auto it : row_rain){
+        for(auto i : col_rain){
+            if(maps[it][i].land == GRASS){
+                if(maps[it][i].entity != FORTIFIED_TOWER) maps[it][i].entity = EMPTY;
+                maps[it][i].land = WATER;
+            }
+        }
+    }
+
+    print_map();
 
 }
 
@@ -236,12 +494,27 @@ void move_enemy(string s){
         int a1 = path_vec[i].fi;
         int a2 = path_vec[i].se;
 
-        if(maps[a1][a2].entity == ENEMY){
-            if((i+move) >= path_vec.size()){
+        if(maps[a1][a2].entity == ENEMY && maps[a1][a2].land != GRASS && maps[a1][a2].n_enemies > 0){
+
+            int tele_s = 0;
+
+            if(maps[a1][a2].land == TELEPORTER){
+                    for(int i = 0; i<tele.size(); i+=4){
+                        if(a1 == tele[i] && a2 == tele[i+1]){
+                            tele_s += tele_size[i/4];
+                            break;
+                        }
+                    }
+            }
+
+
+            if((i+move+tele_s) >= path_vec.size()){
                 count += maps[a1][a2].n_enemies;
             }else{
-                int a3 = path_vec[i+move].fi;
-                int a4 = path_vec[i+move].se;
+
+                int a3 = path_vec[i+move+tele_s].fi;
+                int a4 = path_vec[i+move+tele_s].se;
+
 
                 maps[a3][a4].entity = ENEMY;
 
@@ -255,7 +528,10 @@ void move_enemy(string s){
         }
     }
 
-    cout<<count<<" enemies reached the end!"<<endl;
+    lives -= count;
+    lives = max(lives, 0);
+
+    cout<<count<<" enemies reached the end!"<<endl<<endl;
 
     print_map();
 }
